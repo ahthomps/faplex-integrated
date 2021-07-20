@@ -10,6 +10,7 @@
 #include <map>
 #include <ctime>
 #include <climits>
+#include <string>
 #include "Defines.h"
 #include "RandList.h"
 #include "LinearHeap.h"
@@ -106,10 +107,12 @@ class EnuBundle
 	ui* dseq;
 	ui *dpos;
 	ui* core;
+	std::string filename;
 	ui k;
 	ui lb;
 	ui decompose;
 	ui quiete; 
+	ui reductions;
 
 	//induced subgraph
 	ui bvtx;
@@ -212,7 +215,7 @@ public:
 
 	int degeneracyOrder(ui * seq, ui * core, ui * pos);
 	
-	void enumPlex(ui _k, ui _lb, uli maxsec, ui _isdecomp, ui _quiete);
+	void enumPlex(std::string filename, ui _k, ui _lb, uli maxsec, ui _isdecomp, ui _quiete, ui reductions);
 
 	//ui checkMaximal(vector<ui>& S, ui * degS);
 

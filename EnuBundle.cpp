@@ -172,14 +172,14 @@ ui EnuBundle::markBlock1(ui v, ui* adress) {
 				v_tri_count++;
 		}
 	}
-#ifdef VERTEX3
-	if (2 * v_tri_count < (lb - k) * (lb - 2 * k)) {
+
+	if (reductions && 2 * v_tri_count < (lb - k) * (lb - 2 * k)) {
 		v_skipped++;
 		adress[0] = v;
 		szblk = 1;
 		return szblk;
 	}
-#endif
+
 	/*size pruning*/
 	for (ui i = 0; i < szc2; i++) {
 		ui u = cache2[i];
@@ -735,10 +735,10 @@ void EnuBundle::recurSearch(ui start) {
 	for (ui i = 0; i < Cand.getSize(); i++) {
 		ui u = Cand.get(i);
 		bool cant_move = !canMoveToP(u);
-#ifdef BRANCHVTRI
-		if (!cant_move) {
+		if (reductions > 1 && !cant_move) {
 			cant_move = !canMoveCandToP_mine(u);
-			v_reduced_branch++;
+			if (cant_move)
+				v_reduced_branch++;
 		}
 		// if (cant_move) {
 		// 	printf("removing vertex %u\n", i);
@@ -758,8 +758,7 @@ void EnuBundle::recurSearch(ui start) {
 		// 			printf("\n");
 		// 		}
 		// 	exit(0);
-		// }
-#endif			
+		// }		
 		if (cant_move)
 			rcand.emplace_back(u);
 	}
@@ -1044,14 +1043,16 @@ ubr: suggestion a vertex for branch
 	}	
 }
  
-void EnuBundle::enumPlex(ui _k, ui _lb, uli _maxsec, ui _isdecompose, ui _quiete)
+void EnuBundle::enumPlex(std::string _filename, ui _k, ui _lb, uli _maxsec, ui _isdecompose, ui _quiete, ui _reductions)
 {	
 	startclk = clock();
+	filename = _filename;
 	k = _k;
 	lb = _lb;
 	maxsec = _maxsec;
 	decompose = _isdecompose;
 	quiete = _quiete;
+	reductions = _reductions;
 
 	cntplex = 0;
 	interrupt = 0; //interrupt the program when time out.
@@ -1170,13 +1171,17 @@ void EnuBundle::enumPlex(ui _k, ui _lb, uli _maxsec, ui _isdecompose, ui _quiete
 		branch();
 	}
 	enumclk = clock();
-	printf("Number of vertices skipped: %u\n", v_skipped);
-	printf("Number of vertices not added to block (edges skipped): %u\n", e_skipped);
-	printf("Number of vertices skipped during branching: %u\n", v_reduced_branch);
-	printf("Number of %u-cplex larger than %u:  %u\n", k, lb, cntplex);
-	printf("Total search time %.2f\n", Utility::elapse_seconds(startclk, enumclk));
-	printf("Sort time %.2f\n", Utility::elapse_seconds(startclk, sortclk));
+	// printf("Number of vertices skipped: %u\n", v_skipped);
+	// printf("Number of vertices not added to block (edges skipped): %u\n", e_skipped);
+	// printf("Number of vertices skipped during branching: %u\n", v_reduced_branch);
+	// printf("Number of %u-cplex larger than %u:  %u\n", k, lb, cntplex);
+	// printf("Total search time %.2f\n", Utility::elapse_seconds(startclk, enumclk));
+	// printf("Sort time %.2f\n", Utility::elapse_seconds(startclk, sortclk));
+
 	//printf("Totoal nodes %u \n", nnodes);
+
+	// graphname k lb pre-v-tri branch-v-tri kplexes time
+	printf("%s %u %u %u %u %u %.2f\n", filename.c_str(), k, lb, v_skipped, v_reduced_branch, cntplex, Utility::elapse_seconds(startclk, enumclk));
 }
 
 EnuBundle::EnuBundle()

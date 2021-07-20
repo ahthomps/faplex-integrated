@@ -1,5 +1,6 @@
 #include "EnuBundle.h"
 #include "args.hxx"
+#include <string>
 #define FILELEN 1024
 // #pragma comment(linker, "/STACK:102400000,102400000")
 //#define TRANSFER
@@ -34,6 +35,8 @@ int main(int argc, char** argv) {
 	uli maxsec = 600;
 	ui decompose = 0;
 	ui isquiete = 0;
+	ui reductions = 0;
+	std::string filename;
 
 	args::ArgumentParser parser(
         "Enplex, a software for enumerating kplex\n");
@@ -58,6 +61,8 @@ int main(int argc, char** argv) {
 
 	args::ValueFlag<int> Quiete(parser, "quiete", "quiete or not", {'q', "q"}, 0);
 
+	args::ValueFlag<int> Reductions(parser, "reductions", "run or not", {'r', "r"}, 0);
+
     try {
         parser.ParseCLI(argc, argv);
     } catch (args::Help) {
@@ -79,6 +84,13 @@ int main(int argc, char** argv) {
 	lb = args::get(LowerBound);
 	decompose = args::get(Decompose);
 	isquiete = args::get(Quiete);
+	reductions = args::get(Reductions);
+
+	filename = args::get(benchmark_file);
+	size_t slash_pos = filename.rfind('/');
+    size_t dot_graph_pos = filename.rfind('.');
+    if (slash_pos >= filename.size()) filename = filename.substr(0, dot_graph_pos);
+    else filename = filename.substr(slash_pos + 1, dot_graph_pos - slash_pos - 1);
 
 	if (decompose && lb < 2*k-2) {
 		fprintf(stderr, "lb is at least 2k-2 in decompose mode\n");
@@ -86,7 +98,7 @@ int main(int argc, char** argv) {
 	}
 	EnuBundle enbundle;
 	enbundle.readGraph(filepath);
-	enbundle.enumPlex(k,lb,maxsec, decompose,isquiete);
+	enbundle.enumPlex(filename, k,lb,maxsec, decompose,isquiete,reductions);
 	//_CrtDumpMemoryLeaks();
 	return 0;
 }
