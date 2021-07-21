@@ -33,7 +33,7 @@ int EnuBundle::readBinaryGraph(const char* filepath) {
 	}
 	fread(&n, sizeof(ui), 1, f);
 	fread(&m, sizeof(ui), 1, f);
-	printf("n=%u, m=%u (undirected)\n", n, m);
+	// printf("n=%u, m=%u (undirected)\n", n, m);
 	ui* degree = new ui[n];
 	fread(degree, sizeof(ui), n, f);
 
