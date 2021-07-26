@@ -11,6 +11,8 @@
 #include <ctime>
 #include <climits>
 #include <string>
+#include <list>
+#include <unordered_map>
 #include "Defines.h"
 #include "RandList.h"
 #include "LinearHeap.h"
@@ -65,6 +67,34 @@ public:
 };
 #endif // DBGMOD
 
+template <typename T>
+inline void hash_combine(std::size_t &seed, const T &val) {
+    seed ^= std::hash<T>()(val) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+// auxiliary generic functions to create a hash value using a seed
+template <typename T> inline void hash_val(std::size_t &seed, const T &val) {
+    hash_combine(seed, val);
+}
+template <typename T, typename... Types>
+inline void hash_val(std::size_t &seed, const T &val, const Types &... args) {
+    hash_combine(seed, val);
+    hash_val(seed, args...);
+}
+
+template <typename... Types>
+inline std::size_t hash_val(const Types &... args) {
+    std::size_t seed = 0;
+    hash_val(seed, args...);
+    return seed;
+}
+
+struct pair_hash {
+    template <class T1, class T2>
+    std::size_t operator()(const std::pair<T1, T2> &p) const {
+        return hash_val(p.first, p.second);
+    }
+};
+
 class Solution {
 private:
 	set<ui > elems;
@@ -112,7 +142,9 @@ class EnuBundle
 	ui lb;
 	ui decompose;
 	ui quiete; 
-	ui reductions;
+	ui pre_v_tri;
+	ui br_v_tri;
+	ui br_clqness;
 
 	//induced subgraph
 	ui bvtx;
@@ -127,6 +159,10 @@ class EnuBundle
 	ui bn; // block vertex number
 	MBitSet* badc;
 	MBitSet* binv;
+	std::vector<std::list<int>> badj;
+	std::vector<ui> bvtri;
+	std::unordered_map<std::pair<ui, ui>, ui, pair_hash> betri;
+	std::unordered_map<std::pair<ui, ui>, std::vector<ui>*, pair_hash> bcommon;
 
 	RandList P;		//current solution
 	RandList Cand;
@@ -152,13 +188,20 @@ class EnuBundle
 	ui v_skipped;
 	ui e_skipped;
 	ui v_reduced_branch;
+	ui cliqueness_count;
 
 	void removeFrCand(ui u);
 
 	void addToCand(ui u);
 
+	void updateCandCountsRemove(ui const u);
+	void updateCandCountsAdd(ui const u);
+
 	int canMoveToP(ui u);
-	int canMoveCandToP_mine(ui u);
+	int canMoveToPVertexTri(ui u);
+
+	void integrated_quick_clqs(vector<bool> &nodes_status, vector<ui> &max_clq_size);
+	int canMoveToPCliqueness(vector<ui> const &max_clq_size, ui u);
 
 	//void updateSatSet();
 
@@ -183,6 +226,8 @@ class EnuBundle
 	inline ui isInBlock(ui vtx);
 
 	int buildBlock(ui v, ui* blk, ui sz);
+
+	void getVandETriCounts();
 
 	int isGlobalMaximal();
 
@@ -215,7 +260,7 @@ public:
 
 	int degeneracyOrder(ui * seq, ui * core, ui * pos);
 	
-	void enumPlex(std::string filename, ui _k, ui _lb, uli maxsec, ui _isdecomp, ui _quiete, ui reductions);
+	void enumPlex(std::string filename, ui _k, ui _lb, uli maxsec, ui _isdecomp, ui _quiete, ui pre_v_tri, ui br_v_tri, ui br_clqness);
 
 	//ui checkMaximal(vector<ui>& S, ui * degS);
 

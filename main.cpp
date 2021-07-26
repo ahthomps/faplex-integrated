@@ -35,7 +35,9 @@ int main(int argc, char** argv) {
 	uli maxsec = 600;
 	ui decompose = 0;
 	ui isquiete = 0;
-	ui reductions = 0;
+	ui pre_v_tri = 0;
+	ui br_v_tri = 0;
+	ui br_clqness = 0;
 	std::string filename;
 
 	args::ArgumentParser parser(
@@ -61,7 +63,13 @@ int main(int argc, char** argv) {
 
 	args::ValueFlag<int> Quiete(parser, "quiete", "quiete or not", {'q', "q"}, 0);
 
-	args::ValueFlag<int> Reductions(parser, "reductions", "run or not", {'r', "r"}, 0);
+	// args::ValueFlag<int> Reductions(parser, "reductions", "run or not", {'r', "r"}, 0);
+
+	args::ValueFlag<int> PreVTri(parser, "preprocessing v-based triangle", "do it or not", {"pre-v-tri"}, 0);
+
+	args::ValueFlag<int> BRVTri(parser, "branching v-based triangle", "do it or not", {"br-v-tri"}, 0);
+
+	args::ValueFlag<int> BRClqness(parser, "branching cliqueness", "do it or not", {"br-clqness"}, 0);
 
     try {
         parser.ParseCLI(argc, argv);
@@ -84,7 +92,10 @@ int main(int argc, char** argv) {
 	lb = args::get(LowerBound);
 	decompose = args::get(Decompose);
 	isquiete = args::get(Quiete);
-	reductions = args::get(Reductions);
+	// reductions = args::get(Reductions);
+	pre_v_tri = args::get(PreVTri);
+	br_v_tri = args::get(BRVTri);
+	br_clqness = args::get(BRClqness);
 
 	filename = args::get(benchmark_file);
 	size_t slash_pos = filename.rfind('/');
@@ -98,7 +109,7 @@ int main(int argc, char** argv) {
 	}
 	EnuBundle enbundle;
 	enbundle.readGraph(filepath);
-	enbundle.enumPlex(filename, k,lb,maxsec, decompose,isquiete,reductions);
+	enbundle.enumPlex(filename, k,lb,maxsec, decompose,isquiete,pre_v_tri, br_v_tri, br_clqness);
 	//_CrtDumpMemoryLeaks();
 	return 0;
 }

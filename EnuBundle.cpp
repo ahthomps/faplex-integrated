@@ -16,9 +16,12 @@
 #include <fstream>
 #include <string>
 #include <sstream>
+#include <iterator>
 #include "EnuBundle.h"
 #include "Utility.h"
 #include "fast_set.h"
+#include "quick-cliques/Algorithm.h"
+#include "quick-cliques/DegeneracyAlgorithm.h"
 using namespace std;
 
 /**
@@ -71,7 +74,7 @@ int EnuBundle::readGraph(const char* filepath) {
 	ss >> m;
 	m *= 2;
 
-	printf("n=%u, m=%u (undirected)\n", n, m);
+	// printf("n=%u, m=%u (undirected)\n", n, m);
 
 	if (pstart != nullptr) delete[] pstart;
 	pstart = new ui[n + 1];
@@ -173,7 +176,7 @@ ui EnuBundle::markBlock1(ui v, ui* adress) {
 		}
 	}
 
-	if (reductions && 2 * v_tri_count < (lb - k) * (lb - 2 * k)) {
+	if (pre_v_tri && 2 * v_tri_count < (lb - k) * (lb - 2 * k)) {
 		v_skipped++;
 		adress[0] = v;
 		szblk = 1;
@@ -360,8 +363,68 @@ int EnuBundle::buildBlock(ui v, ui *blk, ui sz) {
 		//sort(bedges + bstart[j], bedges + bm); //we can optimize here by sorting the vertex
 	}
 	bstart[bn] = bm;
+
+	badj.clear();
+	badj.reserve(bn);
+
+    for (ui i = 0; i < bn; i++) {
+    	std::list<int> adj_list;
+    	// adj_list.reserve(bstart[i + 1] - bstart[i]);
+    	for (ui j = bstart[i]; j < bstart[i + 1]; j++)
+    		adj_list.push_back(bedges[j]);
+    	badj.push_back(adj_list);
+    }
+
+    // getVandETriCounts();
+
 	return 1;
 
+}
+
+void EnuBundle::getVandETriCounts() {
+	bvtri.resize(bn, 0);
+	betri.clear();
+	betri.reserve(bm);
+	for (auto elmnt : bcommon)
+		delete elmnt.second;
+	bcommon.clear();
+	bcommon.reserve(bm);
+
+	FastSet used;
+	used.set_fast_set(bn);
+
+	for (ui u = 0; u < bn; u++) {
+
+		used.clear();
+		for (ui i = bstart[u]; i < bstart[u + 1]; i++)
+			used.add(bedges[i]);
+
+		ui v_count = 0;
+
+		for (ui i = bstart[u]; i < bstart[u + 1]; i++) {
+			ui v = bedges[i];
+			std::pair<ui, ui> current_edge = std::make_pair(u, v);
+
+			if (u < v) {
+				bcommon[current_edge] = new std::vector<ui>;
+				bcommon[current_edge]->reserve(bstart[v + 1] - bstart[v]);
+			}
+
+			for (ui j = bstart[v]; j < bstart[v + 1]; j++) {
+				ui w = bedges[j];
+				if (used.get(w)) {
+					if (v < w)
+						v_count++;
+					if (u < v)
+						bcommon[current_edge]->push_back(w);
+				}
+			}
+			if (u < v)
+				betri[current_edge] = bcommon.at(current_edge)->size();
+		}
+
+		bvtri[u] = v_count;
+	}
 }
 
 inline void EnuBundle::CandToP(const ui &u) {
@@ -374,7 +437,7 @@ inline void EnuBundle::CandToP(const ui &u) {
 		ui &nei = bedges[i];
 		++neiInP[nei];
 	}	
-
+	// updateCandCountsRemove(u);
 }
 
 inline void EnuBundle::PToCand(const ui &u) {
@@ -387,6 +450,7 @@ inline void EnuBundle::PToCand(const ui &u) {
 		ui &nei = bedges[i];
 		--neiInP[nei];		
 	}
+	// updateCandCountsAdd(u);
 }
 
 void EnuBundle::removeFrCand(ui u) {
@@ -396,6 +460,7 @@ void EnuBundle::removeFrCand(ui u) {
 		ui nei = bedges[i];
 		neiInG[nei]--;
 	}
+	// updateCandCountsRemove(u);
 }
 
 void EnuBundle::addToCand(ui u) {
@@ -405,6 +470,7 @@ void EnuBundle::addToCand(ui u) {
 		ui nei = bedges[i];
 		neiInG[nei]++;
 	}
+	// updateCandCountsAdd(u);
 }
 
 int EnuBundle::canMoveToP(ui u) {
@@ -423,88 +489,126 @@ int EnuBundle::canMoveToP(ui u) {
 	return 1;
 }
 
-int EnuBundle::canMoveCandToP_mine(ui u) {
-	assert(Cand.contains(u));
+int EnuBundle::canMoveToPVertexTri(ui u) {
+	// assert(Cand.contains(u));
 	// if just adding u will not make P a k-plex of size lb
-	if (P.getSize() + 1 < lb) {
-		// u must be in a k_p-plex of size at least lb_p in Cand
-		ui lb_p = lb - P.getSize();
-		// ui k_p = k - (P.getSize() - neiInP[u]);
-		ui k_p = k;
-		// std::cout << "lb': " << lb_p << "and k': " << k_p << std::endl;
-		if (lb_p > 2 * k_p) {
+	if (P.getSize() + 1 >= lb) 
+		return 1;
+	ui lb_p = lb - P.getSize();
+	ui missing_in_P = P.getSize() - neiInP[u];
 
-			FastSet used;
-			used.set_fast_set(bn);
+	if (lb_p <= 2 * k - missing_in_P) 
+	// if (lb_p > 2 * k ) 
+		return 1;
 
-			for (ui i = bstart[u]; i < bstart[u + 1]; i++) {
-				if (Cand.contains(bedges[i]))
-					used.add(bedges[i]);
-			}
+	FastSet used;
+	used.set_fast_set(bn);
 
-			ui tri_count = 0;
-			// count triangles containing vertex u in Cand
-			for (ui i = bstart[u]; i < bstart[u + 1]; i++) {
-				ui v = bedges[i];
-				if (!used.get(v))
-					continue;
-				// look at common neighbors of u and v in P
+	for (ui i = bstart[u]; i < bstart[u + 1]; i++) {
+		if (Cand.contains(bedges[i]))
+			used.add(bedges[i]);
+	}
 
-				for (ui j = bstart[v]; j < bstart[v + 1]; j++) {
-					ui w = bedges[j];
-					if (v < w && used.get(w))
-						tri_count++;
-				}
-				
-				// std::vector<ui> u_neigh;
-				// u_neigh.reserve(bstart[u + 1] - bstart[u] + 1);
-				// for (ui l = bstart[u]; l < bstart[u + 1]; l++) 
-				// 	u_neigh.push_back(bedges[l]);
-				// std::sort(u_neigh.begin(), u_neigh.end());
+	ui tri_count = 0;
+	// count triangles containing vertex u in Cand
+	for (ui i = bstart[u]; i < bstart[u + 1]; i++) {
+		ui v = bedges[i];
+		if (!used.get(v))
+			continue;
+		// look at common neighbors of u and v in P
 
-				// std::vector<ui> v_neigh;
-				// v_neigh.reserve(bstart[v + 1] - bstart[v] + 1);
-				// for (ui l = bstart[v]; l < bstart[v + 1]; l++) 
-				// 	v_neigh.push_back(bedges[l]);
-				// std::sort(v_neigh.begin(), v_neigh.end());
-
-
-				// ui b1 = 0;
-				// ui b2 = 0;
-				// while (b1 != bstart[u + 1] - bstart[u] && b2 != bstart[v + 1] - bstart[v]) {
-				// 	if (u_neigh[b1] < v_neigh[b2])
-				// 		b1++;
-				// 	else if (u_neigh[b1] > v_neigh[b2])
-				// 		b2++; 
-				// 	else {
-				// 		if (v < v_neigh[b2] && Cand.contains(v_neigh[b2])) {
-				// 			// std::cout << "counted" << std::endl;
-				// 		// if (Cand.contains(bedges[b1])) {
-				// 			tri_count++;
-
-				// 			// testing for correctness
-				// 			assert(Cand.contains(u) && Cand.contains(v) && Cand.contains(v_neigh[b2]));
-				// 			bool u_in = false;
-				// 			bool v_in = false;
-				// 			ui w = v_neigh[b2];
-				// 			for (ui j = bstart[w]; j < bstart[w + 1]; j++) {
-				// 				if (bedges[j] == u) u_in = true;
-				// 				else if (bedges[j] == v) v_in = true;
-				// 			}
-				// 			assert(u_in && v_in);
-				// 			// std::cout << u << " " << v << " " << w << std::endl;
-				// 		}
-				// 		b1++; b2++;
-				// 	}
-				// }
-			}
-			// std::cout << "count: " << tri_count << " and needed: " << ((lb_p - k_p) * (lb_p - 2 * k_p)) / 2 << std::endl;
-			if (tri_count * 2 < (lb_p - k_p) * (lb_p - 2 * k_p)) {
-				return 0;
-			}
+		for (ui j = bstart[v]; j < bstart[v + 1]; j++) {
+			ui w = bedges[j];
+			if (v < w && used.get(w))
+				tri_count++;
 		}
 	}
+
+	// std::cout << "count: " << tri_count << " and needed: " << ((lb_p - k_p) * (lb_p - 2 * k_p)) / 2 << std::endl;
+	
+	// if (bvtri[u] * 2 < (lb_p - k + missing_in_P) * (lb_p - 2 * k + missing_in_P)) // constantly updating way
+	if (tri_count * 2 < (lb_p - k + missing_in_P) * (lb_p - 2 * k + missing_in_P)) 
+		return 0;
+		
+	
 	return 1;	
+}
+
+void EnuBundle::integrated_quick_clqs(vector<bool> &nodes_status, vector<ui> &max_clq_size) {
+
+    std::function<void(const std::list<int> &)> update_largest_quick_clique = [&] (std::list<int> const &clq) -> void {
+        for (int const v : clq) {
+            if (max_clq_size[v] < clq.size()) max_clq_size[v] = clq.size();
+        }
+    };
+
+    Algorithm *pAlgorithm = new DegeneracyAlgorithm(badj);
+    pAlgorithm->AddCallBack(update_largest_quick_clique);
+    pAlgorithm->SetQuiet(true);
+
+    std::list<std::list<int>> cliques;
+    pAlgorithm->Run(cliques, nodes_status);
+    delete pAlgorithm;
+
+}
+
+int EnuBundle::canMoveToPCliqueness(vector<ui> const &max_clq_size, ui u) {
+	// assert(Cand.contains(u));
+
+	if (P.getSize() + 1 >= lb)
+		return 1;
+
+	ui lb_p = lb - P.getSize();
+	if (max_clq_size[u] * k < lb_p) 
+		return 0;
+
+	return 1;
+}
+
+void EnuBundle::updateCandCountsRemove(ui const u) {
+	for (ui i = bstart[u]; i < bstart[u + 1]; i++) {
+		ui v = bedges[i];
+
+		// if (!Cand.contains(v))
+		// 	continue;
+
+		std::pair<ui, ui> current_edge;
+		if (u < v)
+			current_edge = std::make_pair(u, v);
+		else
+			current_edge = std::make_pair(v, u);
+
+		bvtri[v] -= betri.at(current_edge);
+
+		for (ui w : *bcommon[current_edge]) {
+			// if (v < w && Cand.contains(w))
+			if (v < w)
+				betri.at(std::make_pair(v, w)) -= 1;
+		}
+	}
+}
+
+void EnuBundle::updateCandCountsAdd(ui const u) {
+	for (ui i = bstart[u]; i < bstart[u + 1]; i++) {
+		ui v = bedges[i];
+
+		// if (!Cand.contains(v))
+		// 	continue;
+
+		std::pair<ui, ui> current_edge;
+		if (u < v)
+			current_edge = std::make_pair(u, v);
+		else
+			current_edge = std::make_pair(v, u);
+
+		bvtri[v] += betri[current_edge];
+
+		for (ui w : *bcommon[current_edge]) {
+			// if (v < w && Cand.contains(w))
+			if (v < w)
+				betri.at(std::make_pair(v, w))++;
+		}
+	}
 }
 /*
 void EnuBundle::updateSatSet() {
@@ -731,41 +835,46 @@ void EnuBundle::recurSearch(ui start) {
 		return;
 	}	
 	CandToP(start);
+	std::vector<bool> nodes_status(bn, false);
 	//update candidate
 	for (ui i = 0; i < Cand.getSize(); i++) {
 		ui u = Cand.get(i);
-		bool cant_move = !canMoveToP(u);
-		if (reductions > 1 && !cant_move) {
-			cant_move = !canMoveCandToP_mine(u);
-			if (cant_move)
+		nodes_status[u] = true;
+		bool cant_move_to_P = !canMoveToP(u);
+		if (br_v_tri && !cant_move_to_P) {
+			cant_move_to_P = !canMoveToPVertexTri(u);
+			if (cant_move_to_P)
 				v_reduced_branch++;
-		}
-		// if (cant_move) {
-		// 	printf("removing vertex %u\n", i);
-		// 	printf("\nP: ");
-		// 	for (ui i = 0; i < P.getSize(); i++) 
-		// 		printf("%u ", P.get(i));
-		// 	printf("\nCand: ");
-		// 	for (ui i = 0; i < Cand.getSize(); i++) 
-		// 		printf("%u ", Cand.get(i));
-		// 	printf("\n");
-		// 	printf("printing block...\n");
-		// 	for (ui i = 0; i < bn; i++) {
-		// 			printf("%u:", i);
-		// 			for (ui j = bstart[i]; j < bstart[i + 1]; j++) {
-		// 				printf("%u ", bedges[j]);
-		// 			}
-		// 			printf("\n");
-		// 		}
-		// 	exit(0);
-		// }		
-		if (cant_move)
+		}	
+		if (cant_move_to_P) {
 			rcand.emplace_back(u);
+			nodes_status[u] = false;
+		}
 	}
+
+	// printf("seg fault?\n");
+
+	if (br_clqness) { // want to do this reduction
+
+		// this is where i can run cliqueness
+		std::vector<ui> max_clq_size(bn, 1);
+		integrated_quick_clqs(nodes_status, max_clq_size);
+
+		for (ui i = 0; i < Cand.getSize(); i++) {
+			ui u = Cand.get(i);
+			if (nodes_status[u] && !canMoveToPCliqueness(max_clq_size, u)) {// not already in rcand
+				rcand.emplace_back(u);
+				cliqueness_count++;
+			}
+		}
+	}
+
+	// printf("nope\n");
 
 	for (auto u : rcand) {
 		removeFrCand(u);
 	}
+
 	//update excl
 	for (ui i = 0; i < Excl.getSize(); i++) {
 		ui u = Excl.get(i);
@@ -775,7 +884,9 @@ void EnuBundle::recurSearch(ui start) {
 	for (auto u: rexcl) {
 		Excl.remove(u);
 	}
+
 	branch(); // branch search	
+
 	//recover
 	PToCand(start);
 
@@ -1043,7 +1154,7 @@ ubr: suggestion a vertex for branch
 	}	
 }
  
-void EnuBundle::enumPlex(std::string _filename, ui _k, ui _lb, uli _maxsec, ui _isdecompose, ui _quiete, ui _reductions)
+void EnuBundle::enumPlex(std::string _filename, ui _k, ui _lb, uli _maxsec, ui _isdecompose, ui _quiete, ui _pre_v_tri, ui _br_v_tri, ui _br_clqness)
 {	
 	startclk = clock();
 	filename = _filename;
@@ -1052,7 +1163,9 @@ void EnuBundle::enumPlex(std::string _filename, ui _k, ui _lb, uli _maxsec, ui _
 	maxsec = _maxsec;
 	decompose = _isdecompose;
 	quiete = _quiete;
-	reductions = _reductions;
+	pre_v_tri = _pre_v_tri;
+	br_v_tri = _br_v_tri;
+	br_clqness = _br_clqness;
 
 	cntplex = 0;
 	interrupt = 0; //interrupt the program when time out.
@@ -1078,9 +1191,11 @@ void EnuBundle::enumPlex(std::string _filename, ui _k, ui _lb, uli _maxsec, ui _
 	nID = new ui[n];
 	bID = new ui[n];
 
+
 	v_skipped = 0;
 	e_skipped = 0;
 	v_reduced_branch = 0;
+	cliqueness_count = 0;
 
 	if (decompose) { // decompose the graph and enumerate k-plexes in smaller subgraphs
 		ui maxcore = degeneracyOrder(dseq, core, dpos); // fast degeneracy order
@@ -1117,7 +1232,8 @@ void EnuBundle::enumPlex(std::string _filename, ui _k, ui _lb, uli _maxsec, ui _
 					printf("\n");
 				}
 #endif
-				
+
+
 				//build cand;
 				P.clear();
 				//P.add(0);
@@ -1142,6 +1258,7 @@ void EnuBundle::enumPlex(std::string _filename, ui _k, ui _lb, uli _maxsec, ui _
 		}
 	}
 	else {
+		printf("is it not doing the degeneracy?");
 		bstart = new ui[n + 1];
 		bedges = new ui[m];
 		
@@ -1181,7 +1298,7 @@ void EnuBundle::enumPlex(std::string _filename, ui _k, ui _lb, uli _maxsec, ui _
 	//printf("Totoal nodes %u \n", nnodes);
 
 	// graphname k lb pre-v-tri branch-v-tri kplexes time
-	printf("%s %u %u %u %u %u %.2f\n", filename.c_str(), k, lb, v_skipped, v_reduced_branch, cntplex, Utility::elapse_seconds(startclk, enumclk));
+	printf("%s %u %u %u %u %u %u %.2f\n", filename.c_str(), k, lb, v_skipped, v_reduced_branch, cliqueness_count, cntplex, Utility::elapse_seconds(startclk, enumclk));
 }
 
 EnuBundle::EnuBundle()
@@ -1220,5 +1337,8 @@ EnuBundle::~EnuBundle()
 	delete[] cache1;
 	delete[] cache2;
 	delete[] cache3;
+
+	for (auto elmnt : bcommon)
+		delete elmnt.second;
 }
 
