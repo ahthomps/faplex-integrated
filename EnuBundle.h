@@ -155,6 +155,8 @@ class EnuBundle
 	ui* nID;// nID[u] is the new id of u in G
 	ui* bstart;
 	ui* bedges;
+	ui* bdstart;
+	ui* bdedges;
 	ui bm;
 	ui bn; // block vertex number
 	MBitSet* badc;

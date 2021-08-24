@@ -348,21 +348,27 @@ int EnuBundle::buildBlock(ui v, ui *blk, ui sz) {
 	*/
 
 	bm = 0;
+	ui bdm = 0;
 	for (ui j = 0; j < bn; j++) {
 		int oruid = bID[j];
 		badc[j].reinit(bn);
 		//binv[j].init(bn);
 		bstart[j] = bm;
+		bdstart[j] = bdm;
 		for (ui k = pstart[oruid]; k < pstart[oruid + 1]; k++) {
 			if (isInBlock(edges[k])) {
 				bedges[bm++] = nID[edges[k]];
 				badc[j].set(nID[edges[k]]);
+
+				if (dpos[bID[j]] < dpos[edges[k]])
+					bdedges[bdm++] = nID[edges[k]];
 			}
 		}
 		//binv[j].flip();
 		//sort(bedges + bstart[j], bedges + bm); //we can optimize here by sorting the vertex
 	}
 	bstart[bn] = bm;
+	bdstart[bn] = bdm;
 
 	badj.clear();
 	badj.reserve(bn);
@@ -498,7 +504,7 @@ int EnuBundle::canMoveToPVertexTri(ui u) {
 	ui missing_in_P = P.getSize() - neiInP[u];
 
 	if (lb_p <= 2 * k - missing_in_P) 
-	// if (lb_p > 2 * k ) 
+	// if (lb_p <= 2 * k ) 
 		return 1;
 
 	FastSet used;
@@ -510,6 +516,7 @@ int EnuBundle::canMoveToPVertexTri(ui u) {
 	}
 
 	ui tri_count = 0;
+	// ui dtri_count = 0;
 	// count triangles containing vertex u in Cand
 	for (ui i = bstart[u]; i < bstart[u + 1]; i++) {
 		ui v = bedges[i];
@@ -517,17 +524,23 @@ int EnuBundle::canMoveToPVertexTri(ui u) {
 			continue;
 		// look at common neighbors of u and v in P
 
-		for (ui j = bstart[v]; j < bstart[v + 1]; j++) {
-			ui w = bedges[j];
-			if (v < w && used.get(w))
+		// for (ui j = bstart[v]; j < bstart[v + 1]; j++) {
+		// 	ui w = bedges[j];
+		// 	if (v < w && used.get(w))
+		// 		tri_count++;
+		// }
+
+		for (ui j = bdstart[v]; j < bdstart[v + 1]; j++)
+			if (used.get(bdedges[j]))
 				tri_count++;
-		}
 	}
 
+	// assert(tri_count == dtri_count);
 	// std::cout << "count: " << tri_count << " and needed: " << ((lb_p - k_p) * (lb_p - 2 * k_p)) / 2 << std::endl;
 	
 	// if (bvtri[u] * 2 < (lb_p - k + missing_in_P) * (lb_p - 2 * k + missing_in_P)) // constantly updating way
 	if (tri_count * 2 < (lb_p - k + missing_in_P) * (lb_p - 2 * k + missing_in_P)) 
+	// if (tri_count * 2 < (lb_p - k) * (lb_p - 2 * k))
 		return 0;
 		
 	
@@ -1204,6 +1217,8 @@ void EnuBundle::enumPlex(std::string _filename, ui _k, ui _lb, uli _maxsec, ui _
 		ui maxbn = min(maxcore*maxcore + 1, n);
 		bstart = new ui[maxbn + 1];
 		bedges = new ui[m];
+		bdstart = new ui[maxbn + 1];
+		bdedges = new ui[m];
 		badc = new MBitSet[maxbn];
 		for (ui i = 0; i < maxbn; i++) {
 			badc[i].allocacte(maxbn);
@@ -1313,6 +1328,8 @@ EnuBundle::EnuBundle()
 	bedges = nullptr;	
 	badc = nullptr;
 	binv = nullptr;	
+	bdstart = nullptr;
+	bdedges = nullptr;
 }
 
 
@@ -1330,6 +1347,8 @@ EnuBundle::~EnuBundle()
 	delete[] nID;
 	delete[] bstart;
 	delete[] bedges;
+	delete[] bdstart;
+	delete[] bdedges;
 	//delete[] badc;
 	//delete binv;
 	delete[] neiInG;
